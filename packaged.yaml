@@ -1,0 +1,40 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: Lambda collection
+Globals:
+  Function:
+    Timeout: 5
+Outputs:
+  GenerateUUIDAPI:
+    Description: API Gateway endpoint URL for Prod environment for First Function
+    Value:
+      Fn::Sub: https://${ServerlessRestApi}.execute-api.${AWS::Region}.amazonaws.com/Prod/generate-uuid/
+  GenerateUUIDFunction:
+    Description: First Lambda Function ARN
+    Value:
+      Fn::GetAtt:
+      - GenerateUUIDFunction
+      - Arn
+  GenerateUUIDFunctionIamRole:
+    Description: Implicit IAM Role created for Hello World function
+    Value:
+      Fn::GetAtt:
+      - GenerateUUIDFunctionRole
+      - Arn
+Resources:
+  GenerateUUIDFunction:
+    Properties:
+      CodeUri: s3://12bitlambdafns/b6b004658d37f0b59c644e81537f89cd
+      Environment:
+        Variables:
+          PARAM1: VALUE
+      Events:
+        CatchAll:
+          Properties:
+            Method: GET
+            Path: /generate-uuid
+          Type: Api
+      Handler: generate-uuid
+      Runtime: go1.x
+      Tracing: Active
+    Type: AWS::Serverless::Function
+Transform: AWS::Serverless-2016-10-31
