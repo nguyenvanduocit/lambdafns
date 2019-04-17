@@ -6,10 +6,10 @@ deps:
 init: deps create-bucket
 
 clean: 
-	rm -rf ./generate-uuid/generate-uuid
+	rm -rf ./crawl-rss/crawl-rss
 
 build: clean
-	GOOS=linux GOARCH=amd64 go build -o generate-uuid/generate-uuid ./generate-uuid
+	GOOS=linux GOARCH=amd64 go build -o crawl-rss/crawl-rss ./crawl-rss
 
 create-bucket:
 	aws s3 mb --profile 12bit s3://12bitlambdafns

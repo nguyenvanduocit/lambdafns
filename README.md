@@ -1,6 +1,6 @@
-# generate-uuid
+# crawl-rss
 
-This is a sample template for generate-uuid - Below is a brief explanation of what we have generated for you:
+This is a sample template for crawl-rss - Below is a brief explanation of what we have generated for you:
 
 ```bash
 .
@@ -96,7 +96,7 @@ Next, the following command will create a Cloudformation Stack and deploy your S
 ```bash
 sam deploy \
     --template-file packaged.yaml \
-    --stack-name generate-uuid \
+    --stack-name crawl-rss \
     --capabilities CAPABILITY_IAM
 ```
 
@@ -106,7 +106,7 @@ After deployment is complete you can run the following command to retrieve the A
 
 ```bash
 aws cloudformation describe-stacks \
-    --stack-name generate-uuid \
+    --stack-name crawl-rss \
     --query 'Stacks[].Outputs'
 ``` 
 
@@ -165,12 +165,12 @@ sam package \
 
 sam deploy \
     --template-file packaged.yaml \
-    --stack-name generate-uuid \
+    --stack-name crawl-rss \
     --capabilities CAPABILITY_IAM \
     --parameter-overrides MyParameterSample=MySampleValue
 
 aws cloudformation describe-stacks \
-    --stack-name generate-uuid --query 'Stacks[].Outputs'
+    --stack-name crawl-rss --query 'Stacks[].Outputs'
 ```
 
 ## Bringing to the next level
