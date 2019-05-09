@@ -9,7 +9,7 @@ clean:
 	rm -rf ./crawl-rss/crawl-rss
 
 build: clean
-	GOOS=linux GOARCH=amd64 go build -o crawl-rss/crawl-rss ./crawl-rss
+	GOOS=linux GOARCH=amd64 go build -ldflags="-s -w" -o crawl-rss/crawl-rss ./crawl-rss
 
 create-bucket:
 	aws s3 mb --profile 12bit s3://12bitlambdafns

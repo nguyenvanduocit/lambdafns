@@ -2,12 +2,8 @@ AWSTemplateFormatVersion: '2010-09-09'
 Description: Lambda collection
 Globals:
   Function:
-    Timeout: 300
+    Timeout: 900
 Outputs:
-  CrawlRssAPI:
-    Description: API Gateway endpoint URL for Prod environment for First Function
-    Value:
-      Fn::Sub: https://${ServerlessRestApi}.execute-api.${AWS::Region}.amazonaws.com/Prod/crawl-rss/
   CrawlRssFunction:
     Description: First Lambda Function ARN
     Value:
@@ -23,19 +19,14 @@ Outputs:
 Resources:
   CrawlRssFunction:
     Properties:
-      CodeUri: s3://12bitlambdafns/ccdc8106f44d1d8a7f6fd1775c881452
+      CodeUri: s3://12bitlambdafns/6679fc5e524fe2ad9ea0cff12131ebf0
       Environment:
         Variables:
-          GITHUB_ACCESS_TOKEN: 2546d5c680321a69390f7b4af2b84dcf1612ab93
+          GITHUB_ACCESS_TOKEN: 8a6bd05d00472d5b03beed8b6554fb53cdf565a9
       Events:
-        API:
-          Properties:
-            Method: GET
-            Path: /crawl-rss
-          Type: Api
         Schedule:
           Properties:
-            Schedule: rate(1 day)
+            Schedule: cron(0 6,18 * * ? *)
           Type: Schedule
       Handler: crawl-rss
       Runtime: go1.x

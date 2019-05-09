@@ -12,24 +12,31 @@ import (
 	"github.com/gosimple/slug"
 	"github.com/mmcdole/gofeed"
 	"golang.org/x/oauth2"
+	"log"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
+	"strings"
 	"text/template"
 	"time"
 )
 
 type Site struct {
-	RssURL string `json:"rss_url"`
+	RssURL   string `json:"rss_url"`
+	Language string `json:"language"`
 }
 
 var (
-	siteFileUrl      = "https://raw.githubusercontent.com/12bitvn/news.12bit.vn/master/data/links.json"
+	siteFileUrl      = "https://raw.githubusercontent.com/12bitvn/news.12bit.vn/master/data/sites.json"
 	markdownTemplate = `---
-title: "{{ .Title }}"
-date: {{ .PublishedParsed.Format "2006-01-02T15:04:05Z07:00" }}
-feedItem: "{{ .feedItem }}"
-site: {{.Custom.site}}
+title: "{{.Title}}"
+date: {{.PublishedParsed.Format "2006-01-02T15:04:05Z07:00"}}
+link: {{.Link}}
+site: {{.Custom.site}}{{if .Custom.language}}
+language: {{.Custom.language}}{{end}}{{if .Categories}}
+category:{{range $category := .Categories}}
+  - {{$category}}{{end}}{{end}}
 draft: false
 ---
 `
@@ -38,15 +45,17 @@ draft: false
 	reponame       = "news.12bit.vn"
 	owner          = "12bitvn"
 	branch         = "master"
-	path           = "content/feedItems"
+	path           = "content/links"
 
 	feedParser   = gofeed.NewParser()
 	httpClient   = &http.Client{Timeout: 10 * time.Second}
 	githubClient *github.Client
 	err          error
+
+	maxArticlePerSite = 2
 )
 
-func handler(request events.APIGatewayProxyRequest) (events.APIGatewayProxyResponse, error) {
+func handler(request events.CloudWatchEvent) (events.APIGatewayProxyResponse, error) {
 	accessToken := os.Getenv("GITHUB_ACCESS_TOKEN")
 	if accessToken == "" {
 		return events.APIGatewayProxyResponse{}, errors.New("GITHUB_ACCESS_TOKEN is required")
@@ -61,18 +70,32 @@ func handler(request events.APIGatewayProxyRequest) (events.APIGatewayProxyRespo
 		return events.APIGatewayProxyResponse{}, err
 	}
 
+	feedChan := make(chan *gofeed.Feed)
+
 	for _, site := range sites {
-		feed, err := feedParser.ParseURL(site.RssURL)
-		if err != nil {
-			return events.APIGatewayProxyResponse{}, err
-		}
-		for _, feedItem := range feed.Items[:5] {
-			feedItem.Custom["site"] = feed.Link
-			if isFileExist(getFileName(feedItem)) {
-				continue
+		go parseFeed(site, feedChan)
+	}
+	for index := 0; index < len(sites); index++ {
+		select {
+		case feed := <-feedChan:
+			if feed == nil {
+				break
 			}
-			if err := Commit(feedItem, githubClient); err != nil {
-				return events.APIGatewayProxyResponse{}, err
+			log.Printf("Site: %s\n", feed.Title)
+			articlePerSite := maxArticlePerSite
+			if maxArticlePerSite > len(feed.Items) {
+				articlePerSite = len(feed.Items) - 1
+			}
+			for _, feedItem := range feed.Items[:articlePerSite] {
+				feedLink, _ := url.Parse(feed.Link)
+				feedItemLink, _ := url.Parse(feedItem.Link)
+				feedItem.Link = addUTM(feedItemLink)
+				feedItem.Title = strings.ReplaceAll(feedItem.Title, `"`, `'`)
+				feedItem.Custom = map[string]string{
+					"site":     fmt.Sprintf("%s%s", feedLink.Host, strings.Trim(feedLink.Path, "/")),
+					"language": feed.Language,
+				}
+				log.Printf("Link: %s\n", commit(feedItem, githubClient))
 			}
 		}
 	}
@@ -82,8 +105,32 @@ func handler(request events.APIGatewayProxyRequest) (events.APIGatewayProxyRespo
 	}, nil
 }
 
-func fetchSiteList(fileUrl string) ([]Site, error) {
-	var sites []Site
+func addUTM(link *url.URL) string {
+	query := link.Query()
+	query.Del("utm_source")
+	query.Del("utm_medium")
+	query.Del("utm_campaign")
+	query.Add("utm_source", "news.12bit.vn")
+	query.Add("utm_medium", "RSS")
+	link.RawQuery = query.Encode()
+	return link.String()
+}
+
+func parseFeed(site Site, resultChan chan *gofeed.Feed) (result *gofeed.Feed) {
+	defer func() {
+		resultChan <- result
+	}()
+	feed, err := feedParser.ParseURL(site.RssURL)
+	if err != nil {
+		log.Println(err)
+		return nil
+	}
+	feed.Language = site.Language
+	return feed
+}
+
+func fetchSiteList(fileUrl string) (map[string]Site, error) {
+	var sites map[string]Site
 	r, err := httpClient.Get(fileUrl)
 	if err != nil {
 		return nil, err
@@ -104,48 +151,56 @@ func newGithubClient(accessToken string) *github.Client {
 	return github.NewClient(tc)
 }
 
-func Commit(feedItem *gofeed.Item, client *github.Client) error {
-	content, err := Render(feedItem)
+func commit(feedItem *gofeed.Item, client *github.Client) (result string) {
+	defer func() {
+		result = fmt.Sprintf("%s: %s", feedItem.Title, result)
+	}()
+
+	content, err := render(feedItem, markdownTemplate)
 	if err != nil {
-		return err
+		return err.Error()
 	}
 	ctx := context.Background()
 	opts := &github.RepositoryContentFileOptions{
-		Message:   github.String(fmt.Sprintf("add new feedItem %s", getFileName(feedItem))),
-		Content:   content,
+		Message:   github.String(fmt.Sprintf("crawler: %s", feedItem.Title)),
+		Content:   content.Bytes(),
 		Branch:    github.String(branch),
 		Committer: &github.CommitAuthor{Name: github.String(committer), Email: github.String(committerEmail)},
 	}
-
-	if _, _, err := client.Repositories.CreateFile(ctx, owner, reponame, filepath.Join(path, getFileName(feedItem)), opts); err != nil {
-		return err
+	if !isFileExist(getFileName(feedItem)) {
+		if _, _, err := client.Repositories.CreateFile(ctx, owner, reponame, filepath.Join(path, getFileName(feedItem)), opts); err != nil {
+			return err.Error()
+		}
 	}
-	return nil
+	return "success"
 }
 
 func getFileName(feedItem *gofeed.Item) string {
 	return fmt.Sprintf("%s-%s.md", slug.Make(feedItem.Title), feedItem.PublishedParsed.Format(time.RFC3339))
 }
 
-func Render(feedItem *gofeed.Item) ([]byte, error) {
-	tmpl, err := template.New("feedItem-template").Parse(markdownTemplate)
+func render(feedItem *gofeed.Item, templateString string) (*bytes.Buffer, error) {
+	tmpl, err := template.New("feedItem-template").Parse(templateString)
 	if err != nil {
 		return nil, err
 	}
 	var tpl bytes.Buffer
-	if err := tmpl.Execute(&tpl, feedItem); err != nil {
+	if err := tmpl.Execute(&tpl, *feedItem); err != nil {
 		return nil, err
 	}
-	return tpl.Bytes(), nil
+	return &tpl, nil
 }
 
 func isFileExist(filename string) bool {
-	req, _ := http.NewRequest("GET", fmt.Sprintf("https://raw.githubusercontent.com/%s/%s/master/%s", owner, reponame, filepath.Join(path, filename)), nil)
-	req.Header.Add("Range", "bytes=0-1023")
-	resp, _ := httpClient.Do(req)
-	return resp.StatusCode == http.StatusOK
+	fileUrl := fmt.Sprintf("https://raw.githubusercontent.com/%s/%s/master/%s", owner, reponame, filepath.Join(path, filename))
+	response, err := http.Head(fileUrl)
+	if err != nil {
+		return false
+	}
+	return response.StatusCode == http.StatusOK
 }
 
 func main() {
+	log.SetFlags(log.LstdFlags | log.Lshortfile)
 	lambda.Start(handler)
 }
