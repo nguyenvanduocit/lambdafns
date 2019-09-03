@@ -22,7 +22,7 @@ Resources:
             Schedule: cron(0 6,18 * * ? *)
       Environment: # More info about Env Vars: https://github.com/awslabs/serverless-application-model/blob/master/versions/2016-10-31.md#environment-object
         Variables:
-          GITHUB_ACCESS_TOKEN: 8a6bd05d00472d5b03beed8b6554fb53cdf565a9
+          GITHUB_ACCESS_TOKEN: d82f360477b3bdd8282701846d867acd8d8c61d2
 
 Outputs:
   # ServerlessRestApi is an implicit API created out of Events key under Serverless::Function

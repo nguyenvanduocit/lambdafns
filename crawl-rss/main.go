@@ -92,7 +92,7 @@ func handler(request events.CloudWatchEvent) (events.APIGatewayProxyResponse, er
 				feedItem.Link = addUTM(feedItemLink)
 				feedItem.Title = strings.ReplaceAll(feedItem.Title, `"`, `'`)
 				feedItem.Custom = map[string]string{
-					"site":     fmt.Sprintf("%s%s", feedLink.Host, strings.Trim(feedLink.Path, "/")),
+					"site":     fmt.Sprintf("%s/%s", feedLink.Host, strings.Trim(feedLink.Path, "/")),
 					"language": feed.Language,
 				}
 				log.Printf("Link: %s\n", commit(feedItem, githubClient))
@@ -171,8 +171,9 @@ func commit(feedItem *gofeed.Item, client *github.Client) (result string) {
 		if _, _, err := client.Repositories.CreateFile(ctx, owner, reponame, filepath.Join(path, getFileName(feedItem)), opts); err != nil {
 			return err.Error()
 		}
+		return "added"
 	}
-	return "success"
+	return "exist"
 }
 
 func getFileName(feedItem *gofeed.Item) string {

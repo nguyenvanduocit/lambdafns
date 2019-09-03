@@ -19,10 +19,10 @@ Outputs:
 Resources:
   CrawlRssFunction:
     Properties:
-      CodeUri: s3://12bitlambdafns/6679fc5e524fe2ad9ea0cff12131ebf0
+      CodeUri: s3://12bitlambdafns/44e7e67c6146c9c5c56387447c5d85e1
       Environment:
         Variables:
-          GITHUB_ACCESS_TOKEN: 8a6bd05d00472d5b03beed8b6554fb53cdf565a9
+          GITHUB_ACCESS_TOKEN: d82f360477b3bdd8282701846d867acd8d8c61d2
       Events:
         Schedule:
           Properties:
